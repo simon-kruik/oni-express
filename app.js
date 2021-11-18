@@ -9,6 +9,7 @@ var nocache = require('nocache');
 var useragent = require('express-useragent');
 
 const jwt = require('jwt-simple');
+const sendEmail = require('./services/SendEmail')
 
 var ocfl = require('./controllers/ocfl');
 var check_jwt = require('./controllers/check_jwt');
@@ -26,6 +27,7 @@ var config = require(configFile)[env];
 const {getVersion, getPortalConfig} = require('./controllers/config');
 const indexer = require('./controllers/indexer');
 const {verifyToken, simpleVerify} = require('./controllers/local_auth');
+const { json } = require('body-parser');
 
 const ocfl_path = config.ocfl.url_path || 'ocfl';
 
@@ -126,6 +128,41 @@ app.post('/jwt', (req, res) => {
 app.post("/auth", (req, res) => {
 });
 
+app.get("/roi_register/:org",(req,res) => {
+  req.session.roiRegistered = true;
+  req.session.organisation = req.params.org;
+  res.redirect('/');
+});
+
+app.post("/roi_register",(req,res) => {
+  req.session.roiRegistered = true;
+  const roi_info = req.body;
+  if (config.email) {
+    data = {
+      "access_key_id":config.email.access_key_id,
+      "secret_access_key":config.email.secret_access_key,
+      "region":config.email.region,
+      "source_email":config.email.source_email,
+      "template":config.email.email_templates.roi.name,
+      "dest_emails":config.email.dest_emails
+    }
+    data["template_data"] = JSON.stringify({"oni_portal_name":config.email.oni_portal_name, "roi_content":roi_info});
+    console.log("Registration received: " + JSON.stringify(roi_info));
+    console.log("Sending email with info to: " + data["dest_emails"]);
+    sendEmail(data);
+  }
+  else {
+    console.error("Attempted to register interest, but no email configured");
+  }
+  //res.status(200).send(roi_info);
+  // TODO: Record/email the registration info
+  // Email Data Manager the ROI Info
+  // Email Contact Address a link to /roi_register/req.params.inst
+  res.redirect('/');
+  
+});
+
+
 app.get('/config/portal', async (req, res) => {
   try {
     const portalConfig = await getPortalConfig({indexer: config['indexer'], express: config, base: config['portal']});
@@ -210,6 +247,22 @@ app.get(`/${ocfl_path}/:oidv/:content*?`, async (req, res) => {
   //  	res.status(403).send("Forbidden");
   //   	return;
   // }
+
+  // TODO: Add a check here for whether Registration of Interest is required
+  // and if it exists in the session
+  console.log("ROI Required value:");
+  console.log(config.ocfl.roi_required);
+
+  if (config.ocfl.roi_required) {
+    if (!req.session || !req.session.roiRegistered) {
+      if (config.ocfl.roiURL) {
+        res.redirect(303, config.ocfl.roiURL);
+      }
+      else {
+        res.status(403).send("Please register your interest before downloading data");
+      }
+    }
+  }
 
   if (config.ocfl.referrer && req.headers['referer'] !== config.ocfl.referrer) {
     console.log(`Request referrer ${req.headers['referer']} does not match ${config.ocfl.referrer}`);
