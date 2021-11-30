@@ -138,7 +138,7 @@ app.post("/roi_register",(req,res) => {
   req.session.roiRegistered = true;
   const roi_info = req.body;
   if (config.email) {
-    data = {
+    rego_data = {
       "access_key_id":config.email.access_key_id,
       "secret_access_key":config.email.secret_access_key,
       "region":config.email.region,
@@ -146,10 +146,21 @@ app.post("/roi_register",(req,res) => {
       "template":config.email.email_templates.roi.name,
       "dest_emails":config.email.dest_emails
     }
-    data["template_data"] = JSON.stringify({"oni_portal_name":config.email.oni_portal_name, "roi_content":roi_info});
+    rego_data["template_data"] = JSON.stringify({"oni_portal_name":config.email.oni_portal_name, "roi_content":roi_info});
     console.log("Registration received: " + JSON.stringify(roi_info));
-    console.log("Sending email with info to: " + data["dest_emails"]);
-    sendEmail(data);
+    console.log("Sending email with info to: " + rego_data["dest_emails"]);
+    access_data = {
+      "access_key_id":config.email.access_key_id,
+      "secret_access_key":config.email.secret_access_key,
+      "region":config.email.region,
+      "source_email":config.email.source_email,
+      "template":config.email.email_templates.roi_access.name,
+      "dest_emails":[roi_info["contact"]]
+    }
+    access_data["template_data"] = JSON.stringify({"oni_portal_name":config.email.oni_portal_name, "roi_inst_name":roi_info["inst"], "oni_portal_url":"http://" + req.get('host')});
+
+    sendEmail(rego_data);
+    sendEmail(access_data);
   }
   else {
     console.error("Attempted to register interest, but no email configured");
